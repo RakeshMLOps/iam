@@ -1,0 +1,54 @@
+import boto3
+import json
+
+def list_iam_roles_and_policies_to_json(file_name):
+    iam_client = boto3.client('iam')
+
+    roles_data = []
+
+    # List all roles
+    roles = iam_client.list_roles()
+    for role in roles['Roles']:
+        role_name = role['RoleName']
+        role_info = {
+            'RoleName': role_name,
+            'AttachedPolicies': []
+        }
+
+        # List policies attached to the role
+        attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+        for policy in attached_policies['AttachedPolicies']:
+            policy_arn = policy['PolicyArn']
+            policy_info = {
+                'PolicyName': policy['PolicyName'],
+                'PolicyArn': policy_arn,
+                'Actions': []
+            }
+
+            # Get the policy document
+            policy_version = iam_client.get_policy(PolicyArn=policy_arn)['Policy']['DefaultVersionId']
+            policy_document = iam_client.get_policy_version(
+                PolicyArn=policy_arn,
+                VersionId=policy_version
+            )['PolicyVersion']['Document']
+
+            # List actions allowed by the policy
+            if 'Statement' in policy_document:
+                for statement in policy_document['Statement']:
+                    actions = statement.get('Action', [])
+                    if isinstance(actions, str):
+                        actions = [actions]
+                    policy_info['Actions'].extend(actions)
+
+            role_info['AttachedPolicies'].append(policy_info)
+
+        roles_data.append(role_info)
+
+    # Write the data to a JSON file
+    with open(file_name, 'w') as json_file:
+        json.dump(roles_data, json_file, indent=4)
+
+if __name__ == "__main__":
+    output_file = 'iam_roles_policies.json'
+    list_iam_roles_and_policies_to_json(output_file)
+    print(f'Data has been written to {output_file}')
